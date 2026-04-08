@@ -1,4 +1,4 @@
-//src/components/shopping-view/layout.jsx
+//client/src/components/shopping-view/layout.jsx
 import { Outlet } from "react-router-dom";
 import ShoppingHeader from "./header";
 

@@ -1,3 +1,4 @@
+//server/controllers/shop/reservation-controller.js
 const Reservation = require("../../models/Reservation");
 const Vehicle = require("../../models/Vehicle");
 
@@ -77,7 +78,7 @@ async function cancelReservation(req, res) {
     const r = await Reservation.findByIdAndUpdate(
       id,
       { reservationStatus: "cancelled" },
-      { new: true }
+      { new: true },
     );
     if (!r) {
       return res.status(404).json({ success: false, message: "Not found" });

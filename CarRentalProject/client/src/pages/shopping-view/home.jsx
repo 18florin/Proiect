@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import ShoppingVehicleTile from "@/components/shopping-view/vehicle-tile";
 import VehicleDetailsDialog from "@/components/shopping-view/vehicle-details";
 import { useToast } from "@/components/ui/use-toast";
 import { fetchAllAddresses } from "@/store/shop/address-slice";
+import MobileGpsPanel from "@/components/common/mobile-gps-panel";
 
 import {
   fetchAllFilteredVehicles,
@@ -18,23 +17,28 @@ import {
   getAllReservationsByUserId,
 } from "@/store/shop/reservation-slice";
 import { getFeatureImages } from "@/store/common-slice";
+import {
+  markReservationSubmittedToAdmins,
+  resetMobileApproval,
+  setPendingMobileApproval,
+} from "@/store/mobile-slice";
 
 export default function ShoppingHome() {
   const dispatch = useDispatch();
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   const { vehicleList, vehicleDetails } = useSelector((s) => s.shopVehicles);
   const { featureImageList } = useSelector((s) => s.commonFeature);
   const { user, isAuthenticated } = useSelector((s) => s.auth);
   const { addressList } = useSelector((s) => s.shopAddress);
+  const { connected, approvalStatus, pendingReservation } = useSelector(
+    (s) => s.mobile,
+  );
 
   const [currentSlide, setCurrentSlide] = useState(0);
-
   const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
-
-  const [savedCars, setSavedCars] = useState(() =>
-    JSON.parse(localStorage.getItem("savedCars") || "[]")
+  const [savedCars, setSavedCars] = useState(
+    JSON.parse(localStorage.getItem("savedCars") || "[]"),
   );
 
   useEffect(() => {
@@ -42,12 +46,14 @@ export default function ShoppingHome() {
       dispatch(fetchAllAddresses(user._id));
     }
   }, [dispatch, isAuthenticated, user?._id]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       if (featureImageList.length) {
         setCurrentSlide((p) => (p + 1) % featureImageList.length);
       }
     }, 15000);
+
     return () => clearInterval(timer);
   }, [featureImageList]);
 
@@ -56,20 +62,51 @@ export default function ShoppingHome() {
       fetchAllFilteredVehicles({
         filterParams: {},
         sortParams: "price-lowtohigh",
-      })
+      }),
     );
     dispatch(getFeatureImages());
   }, [dispatch]);
 
   useEffect(() => {
-    if (vehicleDetails) setOpenDetailsDialog(true);
+    if (vehicleDetails) {
+      setOpenDetailsDialog(true);
+    }
   }, [vehicleDetails]);
 
   useEffect(() => {
     localStorage.setItem("savedCars", JSON.stringify(savedCars));
   }, [savedCars]);
 
-  async function handleReserveVehicle(v) {
+  useEffect(() => {
+    async function submitReservationAfterApproval() {
+      if (approvalStatus === "approved" && pendingReservation) {
+        try {
+          await dispatch(createNewReservation(pendingReservation)).unwrap();
+          toast({ title: "Mobile approved. Reservation sent to admins!" });
+          dispatch(getAllReservationsByUserId(user._id));
+          dispatch(markReservationSubmittedToAdmins());
+        } catch (err) {
+          toast({
+            title: err.message || "Failed to make reservation",
+            variant: "destructive",
+          });
+          dispatch(resetMobileApproval());
+        }
+      }
+
+      if (approvalStatus === "rejected") {
+        toast({
+          title: "Reservation rejected from mobile",
+          variant: "destructive",
+        });
+        dispatch(markReservationSubmittedToAdmins());
+      }
+    }
+
+    submitReservationAfterApproval();
+  }, [approvalStatus, pendingReservation, dispatch, toast, user?._id]);
+
+  async function handleReserveVehicle(v, reservationData) {
     if (!isAuthenticated) {
       return toast({
         title: "Please log in first",
@@ -77,7 +114,15 @@ export default function ShoppingHome() {
       });
     }
 
-    const addressInfo = addressList[0];
+    if (!connected) {
+      return toast({
+        title: "Mobile phone is not connected",
+        variant: "destructive",
+      });
+    }
+
+    const addressInfo = addressList?.[0];
+
     if (
       !addressInfo ||
       !addressInfo.address ||
@@ -91,54 +136,59 @@ export default function ShoppingHome() {
       });
     }
 
-    const startInput = window.prompt("Start date (YYYY-MM-DD):");
-    const endInput = window.prompt("End date (YYYY-MM-DD):");
-    const startDate = new Date(startInput);
-    const endDate = new Date(endInput);
-    if (
-      !startInput ||
-      !endInput ||
-      isNaN(startDate.getTime()) ||
-      isNaN(endDate.getTime())
-    ) {
+    if (!reservationData) {
       return toast({
-        title: "Invalid dates; reservation cancelled",
+        title: "Please select reservation dates and times",
         variant: "destructive",
       });
     }
 
-    const perDayPrice = v.salePrice > 0 ? v.salePrice : v.price;
-    const days = Math.max(
-      1,
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    const totalAmount = perDayPrice * days;
+    const { startDate, startTime, endDate, endTime } = reservationData;
+
+    const start = new Date(`${startDate}T${startTime}`);
+    const end = new Date(`${endDate}T${endTime}`);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+      return toast({
+        title: "Invalid reservation interval",
+        variant: "destructive",
+      });
+    }
+
+    const pricePerDay = v.salePrice > 0 ? v.salePrice : v.price;
+    const diffMs = end - start;
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const rentalDays = Math.max(1, diffDays);
+    const totalAmount = pricePerDay * rentalDays;
 
     const payload = {
       userId: user._id,
-      vehicles: [{ vehicleId: v._id, quantity: 1, price: perDayPrice }],
+      vehicles: [
+        {
+          vehicleId: v._id,
+          quantity: 1,
+          price: pricePerDay,
+        },
+      ],
       totalAmount,
-      startDate,
-      endDate,
+      startDate: start,
+      endDate: end,
       addressInfo,
+      vehicleTitle: v.title,
     };
 
-    try {
-      await dispatch(createNewReservation(payload)).unwrap();
-      toast({ title: "Reservation request sent!" });
-      dispatch(getAllReservationsByUserId(user._id));
-    } catch (err) {
-      toast({
-        title: err.message || "Failed to make reservation",
-        variant: "destructive",
-      });
-    }
+    dispatch(setPendingMobileApproval(payload));
+
+    toast({
+      title: "Waiting for mobile approval. Press A to approve or X to reject.",
+    });
   }
 
   function handleSaveVehicle(id) {
     setSavedCars((prev) =>
-      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id],
     );
+
     toast({
       title: savedCars.includes(id) ? "Removed from saved cars" : "Car saved",
     });
@@ -149,17 +199,19 @@ export default function ShoppingHome() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <div className="relative w-full h-[600px] overflow-hidden">
+    <div className="flex min-h-screen flex-col">
+      <div className="relative h-[600px] w-full overflow-hidden">
         {featureImageList.map((slide, i) => (
           <img
             key={i}
             src={slide.image}
-            className={`absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ${
+            alt={`Feature ${i + 1}`}
+            className={`absolute left-0 top-0 h-full w-full object-cover transition-opacity duration-1000 ${
               i === currentSlide ? "opacity-100" : "opacity-0"
             }`}
           />
         ))}
+
         <Button
           variant="outline"
           size="icon"
@@ -167,38 +219,44 @@ export default function ShoppingHome() {
             setCurrentSlide((p) =>
               featureImageList.length
                 ? (p - 1 + featureImageList.length) % featureImageList.length
-                : 0
+                : 0,
             )
           }
-          className="absolute top-1/2 left-4 bg-white/80"
+          className="absolute left-4 top-1/2 bg-white/80"
         >
-          <ChevronLeftIcon className="w-4 h-4" />
+          <ChevronLeftIcon className="h-4 w-4" />
         </Button>
+
         <Button
           variant="outline"
           size="icon"
           onClick={() =>
             setCurrentSlide((p) =>
-              featureImageList.length ? (p + 1) % featureImageList.length : 0
+              featureImageList.length ? (p + 1) % featureImageList.length : 0,
             )
           }
-          className="absolute top-1/2 right-4 bg-white/80"
+          className="absolute right-4 top-1/2 bg-white/80"
         >
-          <ChevronRightIcon className="w-4 h-4" />
+          <ChevronRightIcon className="h-4 w-4" />
         </Button>
       </div>
-
+      <div className="container mx-auto mt-6 px-4">
+        <MobileGpsPanel />
+      </div>
       <section className="py-12">
-        <h2 className="text-3xl font-bold text-center mb-8">
+        <h2 className="mb-8 text-center text-3xl font-bold">
           Featured Vehicles
         </h2>
-        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 container mx-auto">
+
+        <div className="container mx-auto grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {vehicleList.map((v) => (
             <ShoppingVehicleTile
               key={v._id}
               vehicle={v}
               handleGetVehicleDetails={() => handleGetVehicleDetails(v._id)}
-              handleReserveVehicle={() => handleReserveVehicle(v)}
+              handleReserveVehicle={(vehicleId, reservationData) =>
+                handleReserveVehicle(v, reservationData)
+              }
               handleSaveVehicle={() => handleSaveVehicle(v._id)}
               isSaved={savedCars.includes(v._id)}
             />
@@ -210,7 +268,9 @@ export default function ShoppingHome() {
         open={openDetailsDialog}
         setOpen={setOpenDetailsDialog}
         vehicleDetails={vehicleDetails}
-        onReserve={handleReserveVehicle}
+        onReserve={(reservationData) =>
+          handleReserveVehicle(vehicleDetails, reservationData)
+        }
       />
     </div>
   );

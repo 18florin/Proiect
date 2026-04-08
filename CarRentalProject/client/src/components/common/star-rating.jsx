@@ -1,4 +1,4 @@
-//src/components/common/star-rating.jsx
+//client/src/components/common/star-rating.jsx
 import { StarIcon } from "lucide-react";
 import { Button } from "../ui/button";
 

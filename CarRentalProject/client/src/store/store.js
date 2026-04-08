@@ -12,11 +12,12 @@ import shopReviewSlice from "./shop/review-slice";
 import cartReducer from "./shop/cart-slice";
 import commonFeatureSlice from "./common-slice";
 import shopSavedSlice from "./shop/saved-slice";
-import reservationReducer from "./shop/reservation-slice";
+import mobileReducer from "./mobile-slice";
 
 const store = configureStore({
   reducer: {
     auth: authReducer,
+    mobile: mobileReducer,
 
     adminVehicles: adminVehiclesSlice,
     adminReservations: adminReservationsSlice,
@@ -30,7 +31,6 @@ const store = configureStore({
     merchCart: cartReducer,
 
     shopSaved: shopSavedSlice,
-    shopReservation: reservationReducer,
 
     commonFeature: commonFeatureSlice,
   },

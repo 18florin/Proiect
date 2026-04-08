@@ -1,3 +1,4 @@
+//client/src/pages/shopping-view/account.jsx
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -53,7 +54,7 @@ export default function ShoppingAccount() {
   async function handleDeleteAccount() {
     if (
       !window.confirm(
-        "Are you sure you want to delete your account? This cannot be undone."
+        "Are you sure you want to delete your account? This cannot be undone.",
       )
     )
       return;

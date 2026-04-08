@@ -1,10 +1,11 @@
-//src/components/shopping-view/vehicle-tile.jsx
+//client/src/components/shopping-view/vehicle-tile.jsx
 import { useState } from "react";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Button } from "../ui/button";
 import { brandOptionsMap, categoryOptionsMap } from "@/config";
 import { Badge } from "../ui/badge";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import ReservationDialog from "./reservation-dialog";
 
 export default function ShoppingVehicleTile({
   vehicle,
@@ -13,119 +14,148 @@ export default function ShoppingVehicleTile({
   handleSaveVehicle,
   isSaved,
 }) {
-  const imgs =
-    Array.isArray(vehicle.images) && vehicle.images.length > 0
-      ? vehicle.images
+  const mediaItems = [
+    ...(Array.isArray(vehicle.images) && vehicle.images.length > 0
+      ? vehicle.images.map((img) => ({ type: "image", src: img }))
       : vehicle.image
-        ? [vehicle.image]
-        : [];
+        ? [{ type: "image", src: vehicle.image }]
+        : []),
+    ...(vehicle.video ? [{ type: "video", src: vehicle.video }] : []),
+  ];
 
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [openReservation, setOpenReservation] = useState(false);
 
   const stop = (e) => e.stopPropagation();
+  const currentMedia = mediaItems[currentIdx];
 
   return (
-    <Card className="w-full max-w-sm mx-auto">
-      <div onClick={() => handleGetVehicleDetails(vehicle._id)}>
-        <div className="relative">
-          {imgs[currentIdx] && (
-            <img
-              src={imgs[currentIdx]}
-              alt={`${vehicle.title} ${currentIdx + 1}`}
-              className="w-full h-[300px] object-cover rounded-t-lg"
-            />
-          )}
+    <>
+      <Card className="w-full max-w-sm mx-auto">
+        <div onClick={() => handleGetVehicleDetails(vehicle._id)}>
+          <div className="relative">
+            {currentMedia?.type === "image" && (
+              <img
+                src={currentMedia.src}
+                alt={`${vehicle.title} ${currentIdx + 1}`}
+                className="w-full h-[300px] object-cover rounded-t-lg"
+              />
+            )}
 
-          {imgs.length > 1 && (
-            <>
-              <button
-                onClick={(e) => {
-                  stop(e);
-                  setCurrentIdx((i) => (i - 1 + imgs.length) % imgs.length);
-                }}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full"
-              >
-                <ChevronLeftIcon className="w-5 h-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  stop(e);
-                  setCurrentIdx((i) => (i + 1) % imgs.length);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full"
-              >
-                <ChevronRightIcon className="w-5 h-5" />
-              </button>
-            </>
-          )}
+            {currentMedia?.type === "video" && (
+              <video
+                src={currentMedia.src}
+                controls
+                className="w-full h-[300px] object-cover rounded-t-lg bg-black"
+                onClick={stop}
+              />
+            )}
 
-          {vehicle.salePrice > 0 && (
-            <Badge className="absolute top-2 left-2 bg-green-500">Sale</Badge>
-          )}
+            {mediaItems.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    stop(e);
+                    setCurrentIdx(
+                      (i) => (i - 1 + mediaItems.length) % mediaItems.length,
+                    );
+                  }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full"
+                >
+                  <ChevronLeftIcon className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    stop(e);
+                    setCurrentIdx((i) => (i + 1) % mediaItems.length);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full"
+                >
+                  <ChevronRightIcon className="w-5 h-5" />
+                </button>
+              </>
+            )}
 
-          <Badge
-            className={`absolute top-2 right-2 px-2 py-1 text-sm ${
-              vehicle.isAvailable ? "bg-green-500" : "bg-red-500"
-            }`}
-          >
-            {vehicle.isAvailable ? "Available" : "Rented"}
-          </Badge>
-        </div>
+            {vehicle.salePrice > 0 && (
+              <Badge className="absolute top-2 left-2 bg-green-500">Sale</Badge>
+            )}
 
-        <CardContent className="p-4">
-          <h2 className="text-xl font-bold mb-1">{vehicle.title}</h2>
-          <p className="text-sm text-muted-foreground mb-1">
-            Year: {vehicle.year}
-          </p>
-          <p className="text-sm text-muted-foreground mb-2">
-            Location: {vehicle.location}
-          </p>
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-muted-foreground">
-              {categoryOptionsMap[vehicle.category]}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {brandOptionsMap[vehicle.brand]}
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span
-              className={`text-lg font-semibold text-primary ${
-                vehicle.salePrice > 0 ? "line-through" : ""
+            <Badge
+              className={`absolute top-2 right-2 px-2 py-1 text-sm ${
+                vehicle.isAvailable ? "bg-green-500" : "bg-red-500"
               }`}
             >
-              ${vehicle.price}
-            </span>
-            {vehicle.salePrice > 0 && (
-              <span className="text-lg font-semibold text-primary">
-                ${vehicle.salePrice}
-              </span>
+              {vehicle.isAvailable ? "Available" : "Rented"}
+            </Badge>
+
+            {currentMedia?.type === "video" && (
+              <Badge className="absolute bottom-2 left-2 bg-blue-600">
+                Video
+              </Badge>
             )}
           </div>
-        </CardContent>
-      </div>
 
-      <CardFooter className="flex flex-col gap-2">
-        {!vehicle.isAvailable ? (
-          <Button className="w-full opacity-60 cursor-not-allowed" disabled>
-            Rented
-          </Button>
-        ) : (
+          <CardContent className="p-4">
+            <h2 className="text-xl font-bold mb-1">{vehicle.title}</h2>
+            <p className="text-sm text-muted-foreground mb-1">
+              Year: {vehicle.year}
+            </p>
+            <p className="text-sm text-muted-foreground mb-2">
+              Location: {vehicle.location}
+            </p>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-muted-foreground">
+                {categoryOptionsMap[vehicle.category]}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {brandOptionsMap[vehicle.brand]}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span
+                className={`text-lg font-semibold text-primary ${
+                  vehicle.salePrice > 0 ? "line-through" : ""
+                }`}
+              >
+                ${vehicle.price}
+              </span>
+              {vehicle.salePrice > 0 && (
+                <span className="text-lg font-semibold text-primary">
+                  ${vehicle.salePrice}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </div>
+
+        <CardFooter className="flex flex-col gap-2">
+          {!vehicle.isAvailable ? (
+            <Button className="w-full opacity-60 cursor-not-allowed" disabled>
+              Rented
+            </Button>
+          ) : (
+            <Button onClick={() => setOpenReservation(true)} className="w-full">
+              Reserve Vehicle
+            </Button>
+          )}
           <Button
-            onClick={() => handleReserveVehicle(vehicle._id)}
+            onClick={() => handleSaveVehicle(vehicle._id)}
+            variant={isSaved ? "secondary" : "outline"}
             className="w-full"
           >
-            Reserve Vehicle
+            {isSaved ? "Saved" : "Save Car"}
           </Button>
-        )}
-        <Button
-          onClick={() => handleSaveVehicle(vehicle._id)}
-          variant={isSaved ? "secondary" : "outline"}
-          className="w-full"
-        >
-          {isSaved ? "Saved" : "Save Car"}
-        </Button>
-      </CardFooter>
-    </Card>
+        </CardFooter>
+      </Card>
+
+      <ReservationDialog
+        open={openReservation}
+        setOpen={setOpenReservation}
+        vehicle={vehicle}
+        onConfirm={(reservationData) => {
+          handleReserveVehicle(vehicle._id, reservationData);
+        }}
+      />
+    </>
   );
 }

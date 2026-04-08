@@ -1,3 +1,4 @@
+//client/src/components/shopping-view/vehicle-details.jsx
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "../ui/dialog";
@@ -45,8 +46,8 @@ export default function VehicleDetailsDialog({
     Array.isArray(vehicleDetails.images) && vehicleDetails.images.length
       ? vehicleDetails.images
       : vehicleDetails.image
-      ? [vehicleDetails.image]
-      : [];
+        ? [vehicleDetails.image]
+        : [];
 
   const averageReview = reviews.length
     ? reviews.reduce((sum, r) => sum + r.reviewValue, 0) / reviews.length
@@ -61,7 +62,7 @@ export default function VehicleDetailsDialog({
         userName: user.userName,
         reviewMessage: reviewMsg,
         reviewValue: rating,
-      })
+      }),
     ).unwrap();
     setReviewMsg("");
     setRating(0);

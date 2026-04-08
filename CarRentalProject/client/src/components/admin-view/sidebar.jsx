@@ -1,10 +1,11 @@
-//src/components/admin-view/sidebar.jsx
+//client/src/components/admin-view/sidebar.jsx
 import {
   BadgeCheck,
   ChartNoAxesCombined,
   LayoutDashboard,
   Car,
   Users,
+  Image,
 } from "lucide-react";
 import { Fragment } from "react";
 import { useNavigate } from "react-router-dom";
@@ -34,6 +35,12 @@ const adminSidebarMenuItems = [
     label: "Customers",
     path: "/admin/customers",
     icon: <Users />,
+  },
+  {
+    id: "media",
+    label: "Media Manager",
+    path: "/admin/media",
+    icon: <Image />,
   },
 ];
 

@@ -25,10 +25,13 @@ const initialFormData = {
   description: "",
   category: "",
   brand: "",
+  year: "",
+  location: "",
   price: "",
   salePrice: "",
   isAvailable: "true",
   averageReview: 0,
+  video: "",
 };
 
 export default function AdminVehicles() {
@@ -49,6 +52,35 @@ export default function AdminVehicles() {
     dispatch(fetchAllVehicles());
   }, [dispatch]);
 
+  useEffect(() => {
+    if (!currentEditedId) return;
+
+    const vehicleToEdit = vehicleList.find((v) => v._id === currentEditedId);
+    if (!vehicleToEdit) return;
+
+    setFormData({
+      identifier: vehicleToEdit.identifier || "",
+      title: vehicleToEdit.title || "",
+      description: vehicleToEdit.description || "",
+      category: vehicleToEdit.category || "",
+      brand: vehicleToEdit.brand || "",
+      year: vehicleToEdit.year ? String(vehicleToEdit.year) : "",
+      location: vehicleToEdit.location || "",
+      price:
+        vehicleToEdit.price !== undefined ? String(vehicleToEdit.price) : "",
+      salePrice:
+        vehicleToEdit.salePrice !== undefined
+          ? String(vehicleToEdit.salePrice)
+          : "",
+      isAvailable: String(vehicleToEdit.isAvailable),
+      averageReview: vehicleToEdit.averageReview || 0,
+      video: vehicleToEdit.video || "",
+    });
+
+    setUploadedUrls(vehicleToEdit.images || []);
+    setImages([]);
+  }, [currentEditedId, vehicleList]);
+
   function resetForm() {
     setFormData(initialFormData);
     setImages([]);
@@ -67,13 +99,18 @@ export default function AdminVehicles() {
       brand,
       price,
       isAvailable,
+      year,
+      location,
     } = formData;
+
     return (
       identifier.trim() &&
       title.trim() &&
       description.trim() &&
       category.trim() &&
       brand.trim() &&
+      year !== "" &&
+      location.trim() &&
       price !== "" &&
       (isAvailable === "true" || isAvailable === "false") &&
       uploadedUrls.length > 0
@@ -82,26 +119,31 @@ export default function AdminVehicles() {
 
   async function onSubmit(e) {
     e.preventDefault();
+
     const payload = {
       ...formData,
+      year: Number(formData.year),
       price: Number(formData.price),
       salePrice: formData.salePrice ? Number(formData.salePrice) : 0,
       isAvailable: formData.isAvailable === "true",
       images: uploadedUrls,
+      video: formData.video || "",
     };
 
     if (currentEditedId) {
       const res = await dispatch(
         editVehicle({ id: currentEditedId, formData: payload }),
       );
-      if (res.payload.success) {
+
+      if (res?.payload?.success) {
         toast({ title: "Vehicle updated" });
         dispatch(fetchAllVehicles());
         resetForm();
       }
     } else {
       const res = await dispatch(addNewVehicle(payload));
-      if (res.payload.success) {
+
+      if (res?.payload?.success) {
         toast({ title: "Vehicle added" });
         dispatch(fetchAllVehicles());
         resetForm();
@@ -111,7 +153,7 @@ export default function AdminVehicles() {
 
   function handleDelete(id) {
     dispatch(deleteVehicle(id)).then((res) => {
-      if (res.payload.success) {
+      if (res?.payload?.success) {
         toast({ title: "Vehicle deleted" });
         dispatch(fetchAllVehicles());
       }
@@ -121,7 +163,12 @@ export default function AdminVehicles() {
   return (
     <Fragment>
       <div className="mb-5 flex justify-end">
-        <Button onClick={() => setOpenCreateDialog(true)}>
+        <Button
+          onClick={() => {
+            resetForm();
+            setOpenCreateDialog(true);
+          }}
+        >
           Add New Vehicle
         </Button>
       </div>
@@ -161,6 +208,35 @@ export default function AdminVehicles() {
             uploadedUrls={uploadedUrls}
             setUploadedUrls={setUploadedUrls}
           />
+
+          {formData.video && (
+            <div className="mt-6 space-y-3 rounded-lg border bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold">Current Vehicle Video</h4>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      video: "",
+                    }))
+                  }
+                >
+                  Delete Video
+                </Button>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border bg-black">
+                <video
+                  src={formData.video}
+                  controls
+                  className="max-h-[260px] w-full"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="py-6">
             <CommonForm

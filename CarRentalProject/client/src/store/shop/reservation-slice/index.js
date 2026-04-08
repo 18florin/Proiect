@@ -1,3 +1,4 @@
+//client/src/store/shop/reservation-slice/index.js
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 
@@ -13,10 +14,10 @@ export const createNewReservation = createAsyncThunk(
     const response = await axios.post(
       "/api/shop/reservation/create",
       { userId, vehicles, startDate, endDate, addressInfo },
-      { withCredentials: true }
+      { withCredentials: true },
     );
     return response.data;
-  }
+  },
 );
 
 export const getAllReservationsByUserId = createAsyncThunk(
@@ -26,7 +27,7 @@ export const getAllReservationsByUserId = createAsyncThunk(
       withCredentials: true,
     });
     return response.data;
-  }
+  },
 );
 
 export const getReservationDetails = createAsyncThunk(
@@ -34,10 +35,10 @@ export const getReservationDetails = createAsyncThunk(
   async (reservationId) => {
     const response = await axios.get(
       `/api/shop/reservation/details/${reservationId}`,
-      { withCredentials: true }
+      { withCredentials: true },
     );
     return response.data;
-  }
+  },
 );
 
 export const cancelReservation = createAsyncThunk(
@@ -45,10 +46,10 @@ export const cancelReservation = createAsyncThunk(
   async (reservationId) => {
     const response = await axios.delete(
       `/api/shop/reservation/cancel/${reservationId}`,
-      { withCredentials: true }
+      { withCredentials: true },
     );
     return response.data;
-  }
+  },
 );
 
 const slice = createSlice({
@@ -102,7 +103,7 @@ const slice = createSlice({
         state.isLoading = false;
         const updated = action.payload.data;
         const idx = state.reservationList.findIndex(
-          (r) => r._id === updated._id
+          (r) => r._id === updated._id,
         );
         if (idx !== -1) {
           state.reservationList[idx] = updated;

@@ -1,3 +1,4 @@
+//server/models/Vehicle.js
 const mongoose = require("mongoose");
 
 const VehicleSchema = new mongoose.Schema(
@@ -19,6 +20,10 @@ const VehicleSchema = new mongoose.Schema(
       min: 1900,
       max: new Date().getFullYear() + 1,
     },
+    video: {
+      type: String,
+      default: "",
+    },
     price: Number,
     salePrice: Number,
     isAvailable: {
@@ -33,7 +38,7 @@ const VehicleSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Vehicle", VehicleSchema);

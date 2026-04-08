@@ -1,4 +1,8 @@
-const { imageUploadUtil } = require("../../helpers/cloudinary");
+//server/controllers/admin/vehicles-controller.js
+const {
+  imageUploadUtil,
+  uploadBufferToCloudinary,
+} = require("../../helpers/cloudinary");
 const Vehicle = require("../../models/Vehicle");
 
 const handleImagesUpload = async (req, res) => {
@@ -9,12 +13,12 @@ const handleImagesUpload = async (req, res) => {
         .json({ success: false, message: "No files uploaded" });
     }
 
-    const uploadPromises = req.files.map((file) => {
-      const dataUri = `data:${file.mimetype};base64,${file.buffer.toString(
-        "base64"
-      )}`;
-      return imageUploadUtil(dataUri);
-    });
+    const uploadPromises = req.files.map((file) =>
+      uploadBufferToCloudinary(file.buffer, {
+        resource_type: "auto",
+        folder: "car-rental-media",
+      }),
+    );
 
     const results = await Promise.all(uploadPromises);
     const urls = results.map((r) => r.secure_url || r.url);

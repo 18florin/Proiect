@@ -1,4 +1,4 @@
-// src/components/shopping-view/header.jsx
+//client/src/components/shopping-view/header.jsx
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { Button } from "../ui/button";
@@ -22,6 +22,7 @@ import {
   ShoppingCart,
   Store,
 } from "lucide-react";
+import MobileStatus from "@/components/common/mobile-status";
 
 const VISIBLE_IDS = ["home", "vehicles", "search", "merch"];
 
@@ -108,6 +109,7 @@ function HeaderRight() {
 
   return (
     <div className="flex items-center gap-3">
+      <MobileStatus />
       <CartButton />
 
       <DropdownMenu>

@@ -1,4 +1,4 @@
-//src/components/shopping-view/address-card.jsx
+//client/src/components/shopping-view/address-card.jsx
 import { Button } from "../ui/button";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Label } from "../ui/label";

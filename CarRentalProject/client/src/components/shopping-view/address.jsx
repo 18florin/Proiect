@@ -1,4 +1,4 @@
-//src/components/shopping-view/address.jsx
+//client/src/components/shopping-view/address.jsx
 import { useEffect, useState } from "react";
 import CommonForm from "../common/form";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";

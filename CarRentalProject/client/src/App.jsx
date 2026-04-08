@@ -9,12 +9,14 @@ import AdminDashboard from "./pages/admin-view/dashboard";
 import AdminVehicles from "./pages/admin-view/vehicles";
 import AdminReservations from "./pages/admin-view/reservations";
 import AdminFeatures from "./pages/admin-view/features";
+import AdminMedia from "@/pages/admin-view/media";
 import ShoppingLayout from "./components/shopping-view/layout";
 import NotFound from "./pages/not-found";
 import ShoppingHome from "./pages/shopping-view/home";
 import ShoppingListing from "./pages/shopping-view/listing";
 import ShoppingAccount from "./pages/shopping-view/account";
 import SearchVehicles from "./pages/shopping-view/search";
+import MerchDetailsPage from "./pages/shopping-view/merch-details";
 import MerchPage from "./pages/shopping-view/merch";
 import CartPage from "./pages/shopping-view/cart";
 import CheckAuth from "./components/common/check-auth";
@@ -22,11 +24,12 @@ import UnauthPage from "./pages/unauth-page";
 import AuthForgotPassword from "@/pages/auth/forgot-password";
 import AuthResetPassword from "@/pages/auth/reset-password";
 import AdminCustomers from "@/pages/admin-view/customers";
+import { fetchAllAddresses } from "./store/shop/address-slice";
+import PageLoader from "./components/common/PageLoader";
 
 import { useDispatch, useSelector } from "react-redux";
 import { useEffect } from "react";
 import { checkAuth, logoutUser } from "./store/auth-slice";
-import { Skeleton } from "@/components/ui/skeleton";
 
 function App() {
   const { user, isAuthenticated, isLoading } = useSelector(
@@ -48,8 +51,14 @@ function App() {
     dispatch(checkAuth());
   }, [dispatch]);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(fetchAllAddresses());
+    }
+  }, [dispatch, isAuthenticated]);
+
   if (isLoading) {
-    return <Skeleton className="w-[800px] bg-black h-[600px]" />;
+    return <PageLoader />;
   }
 
   return (
@@ -87,6 +96,7 @@ function App() {
           <Route path="reservations" element={<AdminReservations />} />
           <Route path="features" element={<AdminFeatures />} />
           <Route path="customers" element={<AdminCustomers />} />
+          <Route path="media" element={<AdminMedia />} />
         </Route>
 
         <Route
@@ -102,6 +112,7 @@ function App() {
           <Route path="account" element={<ShoppingAccount />} />
           <Route path="search" element={<SearchVehicles />} />
           <Route path="merch" element={<MerchPage />} />
+          <Route path="merch/:id" element={<MerchDetailsPage />} />
           <Route path="cart" element={<CartPage />} />
         </Route>
 

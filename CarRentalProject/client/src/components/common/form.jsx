@@ -1,4 +1,4 @@
-//src/components/common/form.jsx
+//client/src/components/common/form.jsx
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import {

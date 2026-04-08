@@ -26,16 +26,26 @@ import {
   createNewReservation,
   getAllReservationsByUserId,
 } from "@/store/shop/reservation-slice";
+import {
+  markReservationSubmittedToAdmins,
+  resetMobileApproval,
+  setPendingMobileApproval,
+} from "@/store/mobile-slice";
 
 import { ArrowUpDownIcon } from "lucide-react";
 
 export default function ShoppingListing() {
   const dispatch = useDispatch();
+
   const { vehicleList, vehicleDetails, pagination } = useSelector(
-    (s) => s.shopVehicles
+    (s) => s.shopVehicles,
   );
   const { user, isAuthenticated } = useSelector((s) => s.auth);
   const { addressList } = useSelector((s) => s.shopAddress);
+  const { connected, approvalStatus, pendingReservation } = useSelector(
+    (s) => s.mobile,
+  );
+
   const { toast } = useToast();
 
   const [filters, setFilters] = useState({});
@@ -46,7 +56,7 @@ export default function ShoppingListing() {
 
   const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
   const [savedCars, setSavedCars] = useState(
-    JSON.parse(localStorage.getItem("savedCars") || "[]")
+    JSON.parse(localStorage.getItem("savedCars") || "[]"),
   );
 
   useEffect(() => {
@@ -54,6 +64,7 @@ export default function ShoppingListing() {
       dispatch(fetchAllAddresses(user._id));
     }
   }, [dispatch, isAuthenticated, user?._id]);
+
   useEffect(() => {
     dispatch(
       fetchAllFilteredVehicles({
@@ -62,23 +73,66 @@ export default function ShoppingListing() {
         maxPrice,
         location: locationQuery,
         page: currentPage,
-      })
+      }),
     );
   }, [dispatch, filters, sort, maxPrice, locationQuery, currentPage]);
 
   useEffect(() => {
-    if (vehicleDetails) setOpenDetailsDialog(true);
+    if (vehicleDetails) {
+      setOpenDetailsDialog(true);
+    }
   }, [vehicleDetails]);
 
   useEffect(() => {
     localStorage.setItem("savedCars", JSON.stringify(savedCars));
   }, [savedCars]);
 
-  async function handleReserveVehicle(v) {
-    if (!isAuthenticated) {
-      return toast({ title: "Please log in first", variant: "destructive" });
+  useEffect(() => {
+    async function submitReservationAfterApproval() {
+      if (approvalStatus === "approved" && pendingReservation) {
+        try {
+          await dispatch(createNewReservation(pendingReservation)).unwrap();
+          toast({ title: "Mobile approved. Reservation sent to admins!" });
+          dispatch(getAllReservationsByUserId(user._id));
+          dispatch(markReservationSubmittedToAdmins());
+        } catch (err) {
+          toast({
+            title: err.message || "Failed to make reservation",
+            variant: "destructive",
+          });
+          dispatch(resetMobileApproval());
+        }
+      }
+
+      if (approvalStatus === "rejected") {
+        toast({
+          title: "Reservation rejected from mobile",
+          variant: "destructive",
+        });
+        dispatch(resetMobileApproval());
+      }
     }
-    const addressInfo = addressList[0];
+
+    submitReservationAfterApproval();
+  }, [approvalStatus, pendingReservation, dispatch, toast, user?._id]);
+
+  async function handleReserveVehicle(v, reservationData) {
+    if (!isAuthenticated) {
+      return toast({
+        title: "Please log in first",
+        variant: "destructive",
+      });
+    }
+
+    if (!connected) {
+      return toast({
+        title: "Mobile phone is not connected",
+        variant: "destructive",
+      });
+    }
+
+    const addressInfo = addressList?.[0];
+
     if (
       !addressInfo ||
       !addressInfo.address ||
@@ -91,94 +145,116 @@ export default function ShoppingListing() {
         variant: "destructive",
       });
     }
-    const startInput = window.prompt("Start date (YYYY-MM-DD):");
-    const endInput = window.prompt("End date (YYYY-MM-DD):");
-    const startDate = new Date(startInput);
-    const endDate = new Date(endInput);
-    if (
-      !startInput ||
-      !endInput ||
-      isNaN(startDate.getTime()) ||
-      isNaN(endDate.getTime())
-    ) {
+
+    if (!reservationData) {
       return toast({
-        title: "Invalid dates; reservation cancelled",
+        title: "Please select reservation dates and times",
         variant: "destructive",
       });
     }
-    const perDayPrice = v.salePrice > 0 ? v.salePrice : v.price;
-    const days = Math.max(1, (endDate - startDate) / (1000 * 60 * 60 * 24));
-    const totalAmount = perDayPrice * days;
+
+    const { startDate, startTime, endDate, endTime } = reservationData;
+
+    const start = new Date(`${startDate}T${startTime}`);
+    const end = new Date(`${endDate}T${endTime}`);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+      return toast({
+        title: "Invalid reservation interval",
+        variant: "destructive",
+      });
+    }
+
+    const pricePerDay = v.salePrice > 0 ? v.salePrice : v.price;
+    const diffMs = end - start;
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const rentalDays = Math.max(1, diffDays);
+    const totalAmount = pricePerDay * rentalDays;
+
     const payload = {
       userId: user._id,
-      vehicles: [{ vehicleId: v._id, quantity: 1, price: perDayPrice }],
+      vehicles: [
+        {
+          vehicleId: v._id,
+          quantity: 1,
+          price: pricePerDay,
+        },
+      ],
       totalAmount,
-      startDate,
-      endDate,
+      startDate: start,
+      endDate: end,
       addressInfo,
+      vehicleTitle: v.title,
     };
-    try {
-      await dispatch(createNewReservation(payload)).unwrap();
-      toast({ title: "Reservation request sent!" });
-      dispatch(getAllReservationsByUserId(user._id));
-    } catch (err) {
-      toast({
-        title: err.message || "Failed to make reservation",
-        variant: "destructive",
-      });
-    }
+
+    dispatch(setPendingMobileApproval(payload));
+
+    toast({
+      title: "Waiting for mobile approval. Press A to approve or X to reject.",
+    });
   }
 
   function handleFilterChange(section, option) {
-    const nxt = { ...filters };
-    const arr = nxt[section] || [];
-    nxt[section] = arr.includes(option)
-      ? arr.filter((x) => x !== option)
-      : [...arr, option];
-    setFilters(nxt);
+    const nextFilters = { ...filters };
+    const currentOptions = nextFilters[section] || [];
+
+    nextFilters[section] = currentOptions.includes(option)
+      ? currentOptions.filter((x) => x !== option)
+      : [...currentOptions, option];
+
+    setFilters(nextFilters);
+    setCurrentPage(1);
   }
+
   function handleResetFilters() {
     setFilters({});
     setMaxPrice("");
     setLocationQuery("");
     setCurrentPage(1);
   }
-  function handleSortChange(v) {
-    setSort(v);
+
+  function handleSortChange(value) {
+    setSort(value);
+    setCurrentPage(1);
   }
+
   function handleGetVehicleDetails(id) {
     dispatch(fetchVehicleDetails(id));
   }
+
   function handleSaveVehicle(id) {
     setSavedCars((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+
     toast({
       title: savedCars.includes(id) ? "Removed from saved cars" : "Car saved",
     });
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 p-4 md:p-6">
+    <div className="grid grid-cols-1 gap-6 p-4 md:grid-cols-[200px_1fr] md:p-6">
       <VehicleFilter filters={filters} handleFilter={handleFilterChange} />
 
-      <div className="bg-background w-full rounded-lg shadow-sm space-y-4">
-        <div className="p-4 border-b flex flex-wrap items-center gap-3">
+      <div className="w-full space-y-4 rounded-lg bg-background shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 border-b p-4">
           <input
             type="number"
             min="0"
             placeholder="Max price"
             value={maxPrice}
             onChange={(e) => setMaxPrice(e.target.value)}
-            className="w-24 px-2 py-1 border rounded"
+            className="w-24 rounded border px-2 py-1"
           />
+
           <input
             type="text"
             placeholder="Location"
             value={locationQuery}
             onChange={(e) => setLocationQuery(e.target.value)}
-            className="w-32 px-2 py-1 border rounded"
+            className="w-32 rounded border px-2 py-1"
           />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -190,31 +266,35 @@ export default function ShoppingListing() {
                 <span>Sort by</span>
               </Button>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent align="end" className="w-[200px]">
               <DropdownMenuRadioGroup
                 value={sort}
                 onValueChange={handleSortChange}
               >
-                {sortOptions.map((o) => (
-                  <DropdownMenuRadioItem key={o.id} value={o.id}>
-                    {o.label}
+                {sortOptions.map((option) => (
+                  <DropdownMenuRadioItem key={option.id} value={option.id}>
+                    {option.label}
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+
           <Button variant="ghost" size="sm" onClick={handleResetFilters}>
             Reset Filters
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {vehicleList.map((v) => (
             <ShoppingVehicleTile
               key={v._id}
               vehicle={v}
               handleGetVehicleDetails={() => handleGetVehicleDetails(v._id)}
-              handleReserveVehicle={() => handleReserveVehicle(v)}
+              handleReserveVehicle={(vehicleId, reservationData) =>
+                handleReserveVehicle(v, reservationData)
+              }
               handleSaveVehicle={() => handleSaveVehicle(v._id)}
               isSaved={savedCars.includes(v._id)}
             />
@@ -229,9 +309,11 @@ export default function ShoppingListing() {
           >
             Previous
           </Button>
+
           <span className="px-3 py-1">
             Page {currentPage} of {pagination?.pages || 1}
           </span>
+
           <Button
             variant="outline"
             disabled={pagination && currentPage >= pagination.pages}
@@ -246,7 +328,9 @@ export default function ShoppingListing() {
         open={openDetailsDialog}
         setOpen={setOpenDetailsDialog}
         vehicleDetails={vehicleDetails}
-        onReserve={handleReserveVehicle}
+        onReserve={(reservationData) =>
+          handleReserveVehicle(vehicleDetails, reservationData)
+        }
       />
     </div>
   );

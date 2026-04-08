@@ -1,4 +1,4 @@
-//src/components/shopping-view/saved.jsx
+//client/src/components/shopping-view/saved.jsx
 import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import ShoppingVehicleTile from "./vehicle-tile";

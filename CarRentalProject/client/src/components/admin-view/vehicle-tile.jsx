@@ -1,4 +1,4 @@
-//src/components/admin-view/vehicle-tile.jsx
+//client/src/components/admin-view/vehicle-tile.jsx
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardFooter } from "../ui/card";
@@ -12,35 +12,51 @@ function AdminVehicleTile({
   setCurrentEditedId,
   handleDelete,
 }) {
-  const imgs =
-    Array.isArray(vehicle.images) && vehicle.images.length > 0
-      ? vehicle.images
+  const mediaItems = [
+    ...(Array.isArray(vehicle.images) && vehicle.images.length > 0
+      ? vehicle.images.map((img) => ({ type: "image", src: img }))
       : vehicle.image
-        ? [vehicle.image]
-        : [];
+        ? [{ type: "image", src: vehicle.image }]
+        : []),
+    ...(vehicle.video ? [{ type: "video", src: vehicle.video }] : []),
+  ];
 
   const [current, setCurrent] = useState(0);
 
   const prev = (e) => {
     e.stopPropagation();
-    setCurrent((i) => (i - 1 + imgs.length) % imgs.length);
+    if (!mediaItems.length) return;
+    setCurrent((i) => (i - 1 + mediaItems.length) % mediaItems.length);
   };
+
   const next = (e) => {
     e.stopPropagation();
-    setCurrent((i) => (i + 1) % imgs.length);
+    if (!mediaItems.length) return;
+    setCurrent((i) => (i + 1) % mediaItems.length);
   };
+
+  const currentMedia = mediaItems[current];
 
   return (
     <Card className="w-full max-w-sm mx-auto">
       <div className="relative">
-        {imgs[current] && (
+        {currentMedia?.type === "image" && (
           <img
-            src={imgs[current]}
+            src={currentMedia.src}
             alt={`${vehicle.title} ${current + 1}`}
             className="w-full h-[300px] object-cover rounded-t-lg"
           />
         )}
-        {imgs.length > 1 && (
+
+        {currentMedia?.type === "video" && (
+          <video
+            src={currentMedia.src}
+            controls
+            className="w-full h-[300px] object-cover rounded-t-lg bg-black"
+          />
+        )}
+
+        {mediaItems.length > 1 && (
           <>
             <button
               onClick={prev}
@@ -56,6 +72,7 @@ function AdminVehicleTile({
             </button>
           </>
         )}
+
         <Badge
           className={`absolute top-2 right-2 px-2 py-1 text-sm ${
             vehicle.isAvailable ? "bg-green-500" : "bg-red-600"
@@ -63,6 +80,10 @@ function AdminVehicleTile({
         >
           {vehicle.isAvailable ? "Available" : "Rented"}
         </Badge>
+
+        {currentMedia?.type === "video" && (
+          <Badge className="absolute top-2 left-2 bg-blue-600">Video</Badge>
+        )}
       </div>
 
       <CardContent>
@@ -99,6 +120,9 @@ function AdminVehicleTile({
               salePrice: vehicle.salePrice.toString(),
               isAvailable: vehicle.isAvailable.toString(),
               year: vehicle.year.toString(),
+              location: vehicle.location || "",
+              images: vehicle.images || [],
+              video: vehicle.video || "",
             });
           }}
         >

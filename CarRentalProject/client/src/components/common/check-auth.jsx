@@ -1,4 +1,4 @@
-//src/components/common/check-auth.jsx
+//client/src/components/common/check-auth.jsx
 import { Navigate, useLocation } from "react-router-dom";
 
 function CheckAuth({ isAuthenticated, user, children }) {

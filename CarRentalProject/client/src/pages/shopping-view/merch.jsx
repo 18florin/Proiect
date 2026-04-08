@@ -1,8 +1,12 @@
+//client/src/pages/shopping-view/merch.jsx
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDispatch } from "react-redux";
 import { addToCart } from "@/store/shop/cart-slice";
 import { merchProducts } from "@/data/merch-products";
+import { getAutocompleteSuggestions } from "@/utils/autocomplete";
 
 function tokenize(text) {
   return text
@@ -76,10 +80,38 @@ function searchProducts(query, index) {
   return results;
 }
 
+function highlightSuggestion(title, query) {
+  if (!query.trim()) {
+    return title;
+  }
+
+  const lowerTitle = title.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const startIndex = lowerTitle.indexOf(lowerQuery);
+
+  if (startIndex === -1) {
+    return title;
+  }
+
+  const before = title.slice(0, startIndex);
+  const typedPart = title.slice(startIndex, startIndex + query.length);
+  const remainingPart = title.slice(startIndex + query.length);
+
+  return (
+    <>
+      {before}
+      <span>{typedPart}</span>
+      <strong>{remainingPart}</strong>
+    </>
+  );
+}
+
 export default function MerchPage() {
   const dispatch = useDispatch();
   const [searchInput, setSearchInput] = useState("");
   const [searchedProducts, setSearchedProducts] = useState(merchProducts);
+  const [suggestions, setSuggestions] = useState([]);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
 
   const tfidfIndex = useMemo(() => buildTfIdfIndex(merchProducts), []);
 
@@ -87,21 +119,76 @@ export default function MerchPage() {
     dispatch(addToCart(product));
   }
 
+  function handleInputChange(e) {
+    const value = e.target.value;
+    setSearchInput(value);
+
+    const nextSuggestions = getAutocompleteSuggestions(merchProducts, value);
+    setSuggestions(nextSuggestions);
+    setActiveSuggestionIndex(0);
+  }
+
+  function handleSuggestionClick(productTitle) {
+    setSearchInput(productTitle);
+
+    const results = searchProducts(productTitle, tfidfIndex);
+    setSearchedProducts(results);
+    setSuggestions([]);
+    setActiveSuggestionIndex(0);
+  }
+
   function handleSearch() {
     const trimmedQuery = searchInput.trim();
 
     if (!trimmedQuery) {
       setSearchedProducts(merchProducts);
+      setSuggestions([]);
+      setActiveSuggestionIndex(0);
       return;
     }
 
     const results = searchProducts(trimmedQuery, tfidfIndex);
     setSearchedProducts(results);
+    setSuggestions([]);
+    setActiveSuggestionIndex(0);
   }
 
   function handleReset() {
     setSearchInput("");
     setSearchedProducts(merchProducts);
+    setSuggestions([]);
+    setActiveSuggestionIndex(0);
+  }
+
+  function handleKeyDown(e) {
+    if (suggestions.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveSuggestionIndex((prev) =>
+        prev < suggestions.length - 1 ? prev + 1 : prev,
+      );
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveSuggestionIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const selected = suggestions[activeSuggestionIndex];
+      if (selected) {
+        handleSuggestionClick(selected.title);
+      } else {
+        handleSearch();
+      }
+    }
+
+    if (e.key === "Escape") {
+      setSuggestions([]);
+      setActiveSuggestionIndex(0);
+    }
   }
 
   const groupedProducts = searchedProducts.reduce((acc, product) => {
@@ -125,18 +212,52 @@ export default function MerchPage() {
             details.
           </p>
 
-          <div className="mt-6 flex flex-col sm:flex-row gap-3 max-w-2xl">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search products by title..."
-              className="flex-1 h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-400"
-            />
-            <Button onClick={handleSearch}>Search</Button>
-            <Button variant="outline" onClick={handleReset}>
-              Reset
-            </Button>
+          <div className="mt-6 max-w-2xl">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Search products by title..."
+                  autoComplete="off"
+                  className="w-full h-9 border border-[#cfcfcf] bg-white px-3 text-[14px] text-black outline-none"
+                />
+
+                {suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full bg-white border border-[#d8d8d8] border-t-0 shadow-sm z-50">
+                    {suggestions.map((product, index) => {
+                      const isActive = index === activeSuggestionIndex;
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onMouseEnter={() => setActiveSuggestionIndex(index)}
+                          onClick={() => handleSuggestionClick(product.title)}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[14px] ${
+                            isActive
+                              ? "bg-[#1a73e8] text-white"
+                              : "bg-white text-black hover:bg-[#f5f5f5]"
+                          }`}
+                        >
+                          <Search className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">
+                            {highlightSuggestion(product.title, searchInput)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <Button onClick={handleSearch}>Search</Button>
+              <Button variant="outline" onClick={handleReset}>
+                Reset
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -202,16 +323,14 @@ export default function MerchPage() {
                           Add to Cart
                         </Button>
 
-                        <a
-                          href={product.pdfUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                        <Link
+                          to={`/shop/merch/${product.id}`}
                           className="flex-1"
                         >
                           <Button variant="outline" className="w-full">
-                            View Details
+                            View Product
                           </Button>
-                        </a>
+                        </Link>
                       </div>
                     </div>
                   </div>

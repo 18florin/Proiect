@@ -1,4 +1,4 @@
-//src/components/admin-view/header.jsx
+//client/src/components/admin-view/header.jsx
 import { AlignJustify, LogOut } from "lucide-react";
 import { Button } from "../ui/button";
 import { useDispatch } from "react-redux";

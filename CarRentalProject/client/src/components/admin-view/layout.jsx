@@ -1,4 +1,4 @@
-//src/components/admin-view/layout.jsx
+//client/src/components/admin-view/layout.jsx
 import { Outlet } from "react-router-dom";
 import AdminSideBar from "./sidebar";
 import AdminHeader from "./header";

@@ -1,4 +1,4 @@
-//src/components/shopping-view/filter.jsx
+//client/src/components/shopping-view/filter.jsx
 import { filterOptions } from "@/config";
 import { Fragment } from "react";
 import { Label } from "../ui/label";
