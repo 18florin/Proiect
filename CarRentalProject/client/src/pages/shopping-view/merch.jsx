@@ -1,12 +1,13 @@
 //client/src/pages/shopping-view/merch.jsx
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useDispatch } from "react-redux";
 import { addToCart } from "@/store/shop/cart-slice";
 import { merchProducts } from "@/data/merch-products";
 import { getAutocompleteSuggestions } from "@/utils/autocomplete";
+
+/* ================= TF-IDF ================= */
 
 function tokenize(text) {
   return text
@@ -41,10 +42,7 @@ function buildTfIdfIndex(products) {
       df[term] = (df[term] || 0) + 1;
     });
 
-    documents[product.id] = {
-      product,
-      tf,
-    };
+    documents[product.id] = { product, tf };
   });
 
   const idf = {};
@@ -69,10 +67,7 @@ function searchProducts(query, index) {
     });
 
     if (score > 0) {
-      results.push({
-        ...doc.product,
-        score,
-      });
+      results.push({ ...doc.product, score });
     }
   });
 
@@ -80,18 +75,16 @@ function searchProducts(query, index) {
   return results;
 }
 
+/* ================= HIGHLIGHT ================= */
+
 function highlightSuggestion(title, query) {
-  if (!query.trim()) {
-    return title;
-  }
+  if (!query.trim()) return title;
 
   const lowerTitle = title.toLowerCase();
   const lowerQuery = query.toLowerCase();
   const startIndex = lowerTitle.indexOf(lowerQuery);
 
-  if (startIndex === -1) {
-    return title;
-  }
+  if (startIndex === -1) return title;
 
   const before = title.slice(0, startIndex);
   const typedPart = title.slice(startIndex, startIndex + query.length);
@@ -106,8 +99,12 @@ function highlightSuggestion(title, query) {
   );
 }
 
+/* ================= COMPONENT ================= */
+
 export default function MerchPage() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+
   const [searchInput, setSearchInput] = useState("");
   const [searchedProducts, setSearchedProducts] = useState(merchProducts);
   const [suggestions, setSuggestions] = useState([]);
@@ -134,7 +131,6 @@ export default function MerchPage() {
     const results = searchProducts(productTitle, tfidfIndex);
     setSearchedProducts(results);
     setSuggestions([]);
-    setActiveSuggestionIndex(0);
   }
 
   function handleSearch() {
@@ -142,22 +138,18 @@ export default function MerchPage() {
 
     if (!trimmedQuery) {
       setSearchedProducts(merchProducts);
-      setSuggestions([]);
-      setActiveSuggestionIndex(0);
       return;
     }
 
     const results = searchProducts(trimmedQuery, tfidfIndex);
     setSearchedProducts(results);
     setSuggestions([]);
-    setActiveSuggestionIndex(0);
   }
 
   function handleReset() {
     setSearchInput("");
     setSearchedProducts(merchProducts);
     setSuggestions([]);
-    setActiveSuggestionIndex(0);
   }
 
   function handleKeyDown(e) {
@@ -187,14 +179,11 @@ export default function MerchPage() {
 
     if (e.key === "Escape") {
       setSuggestions([]);
-      setActiveSuggestionIndex(0);
     }
   }
 
   const groupedProducts = searchedProducts.reduce((acc, product) => {
-    if (!acc[product.category]) {
-      acc[product.category] = [];
-    }
+    if (!acc[product.category]) acc[product.category] = [];
     acc[product.category].push(product);
     return acc;
   }, {});
@@ -206,54 +195,47 @@ export default function MerchPage() {
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
             RentCar Merchandise
           </h1>
-          <p className="mt-3 text-muted-foreground max-w-2xl">
-            Discover our branded products, grouped by categories. Each item
-            includes a short description and a PDF with additional product
-            details.
-          </p>
 
-          <div className="mt-6 max-w-2xl">
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="mt-6 max-w-2xl space-y-3">
+            <div className="flex gap-2">
               <div className="flex-1 relative">
                 <input
-                  type="text"
                   value={searchInput}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="Search products by title..."
-                  autoComplete="off"
-                  className="w-full h-9 border border-[#cfcfcf] bg-white px-3 text-[14px] text-black outline-none"
+                  placeholder="Search products..."
+                  className="w-full h-10 rounded-md border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-slate-400 outline-none"
                 />
 
                 {suggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full bg-white border border-[#d8d8d8] border-t-0 shadow-sm z-50">
-                    {suggestions.map((product, index) => {
-                      const isActive = index === activeSuggestionIndex;
-
-                      return (
-                        <button
-                          key={product.id}
-                          type="button"
-                          onMouseEnter={() => setActiveSuggestionIndex(index)}
-                          onClick={() => handleSuggestionClick(product.title)}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[14px] ${
-                            isActive
-                              ? "bg-[#1a73e8] text-white"
-                              : "bg-white text-black hover:bg-[#f5f5f5]"
-                          }`}
-                        >
-                          <Search className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">
-                            {highlightSuggestion(product.title, searchInput)}
-                          </span>
-                        </button>
-                      );
-                    })}
+                  <div className="absolute w-full bg-white border rounded-md shadow-md mt-1 z-50">
+                    {suggestions.map((p, i) => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleSuggestionClick(p.title)}
+                        className={`block w-full text-left px-3 py-2 text-sm ${
+                          i === activeSuggestionIndex
+                            ? "bg-slate-100"
+                            : "hover:bg-slate-50"
+                        }`}
+                      >
+                        {highlightSuggestion(p.title, searchInput)}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
 
               <Button onClick={handleSearch}>Search</Button>
+
+              {/* 🔥 BUTON NOU */}
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/shop/lucene-search?q=${searchInput}`)}
+              >
+                Advanced Search (Lucene)
+              </Button>
+
               <Button variant="outline" onClick={handleReset}>
                 Reset
               </Button>
@@ -262,83 +244,46 @@ export default function MerchPage() {
         </div>
       </section>
 
+      {/* PRODUCTS */}
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 space-y-12">
-        {Object.keys(groupedProducts).length === 0 ? (
-          <div className="bg-white border rounded-xl p-8 text-center shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-900">
-              No products found
-            </h2>
-            <p className="text-muted-foreground mt-2">
-              Try searching for terms like "t-shirt", "hoodie", "cap" or "mug".
-            </p>
-          </div>
-        ) : (
-          Object.entries(groupedProducts).map(([category, products]) => (
-            <section key={category}>
-              <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-slate-900">
-                  {category}
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Products available in the {category.toLowerCase()} category.
-                </p>
-              </div>
+        {Object.entries(groupedProducts).map(([category, products]) => (
+          <section key={category}>
+            <h2 className="text-2xl font-semibold mb-6">{category}</h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product) => (
-                  <div
-                    key={product.id}
-                    className="bg-white rounded-xl border shadow-sm overflow-hidden"
-                  >
-                    <img
-                      src={product.image}
-                      alt={product.title}
-                      className="w-full h-56 object-cover"
-                    />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {products.map((p) => (
+                <div
+                  key={p.id}
+                  className="bg-white rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition"
+                >
+                  <img src={p.image} className="w-full h-52 object-cover" />
 
-                    <div className="p-5 space-y-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-900">
-                          {product.title}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-2">
-                          {product.description}
-                        </p>
-                      </div>
+                  <div className="p-4 space-y-2">
+                    <h3 className="font-semibold">{p.title}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {p.price} RON
+                    </p>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-bold text-slate-900">
-                          {product.price} RON
-                        </span>
-                        <span className="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-700">
-                          {product.category}
-                        </span>
-                      </div>
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1"
+                        onClick={() => handleAddToCart(p)}
+                      >
+                        Add to Cart
+                      </Button>
 
-                      <div className="flex gap-3 pt-2">
-                        <Button
-                          className="flex-1"
-                          onClick={() => handleAddToCart(product)}
-                        >
-                          Add to Cart
+                      <Link to={`/shop/merch/${p.id}`} className="flex-1">
+                        <Button variant="outline" className="w-full">
+                          View
                         </Button>
-
-                        <Link
-                          to={`/shop/merch/${product.id}`}
-                          className="flex-1"
-                        >
-                          <Button variant="outline" className="w-full">
-                            View Product
-                          </Button>
-                        </Link>
-                      </div>
+                      </Link>
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
-          ))
-        )}
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

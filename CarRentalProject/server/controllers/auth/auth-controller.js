@@ -1,29 +1,32 @@
 require("dotenv").config();
 
 const crypto = require("crypto");
-const nodemailer = require("nodemailer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../../models/User");
-const { upload, imageUploadUtil } = require("../../helpers/cloudinary");
+const { imageUploadUtil } = require("../../helpers/cloudinary");
 const {
   sendConfirmationEmail,
   sendSuspiciousLoginAlert,
   sendPasswordResetEmail,
 } = require("../../helpers/sendEmail");
 
+// 🔐 REGISTER
 const registerUser = async (req, res) => {
   const { userName, email, password } = req.body;
 
   try {
     const checkUser = await User.findOne({ email });
-    if (checkUser)
+
+    if (checkUser) {
       return res.json({
         success: false,
-        message: "User Already exists with the same email! Please try again",
+        message: "User already exists!",
       });
+    }
 
     const hashPassword = await bcrypt.hash(password, 12);
+
     const newUser = new User({
       userName,
       email,
@@ -31,52 +34,51 @@ const registerUser = async (req, res) => {
     });
 
     await newUser.save();
-
     await sendConfirmationEmail(email, userName);
 
-    res.status(200).json({
+    res.json({
       success: true,
       message: "Registration successful",
     });
   } catch (e) {
-    console.log(e);
     res.status(500).json({
       success: false,
-      message: "Some error occured",
+      message: e.message,
     });
   }
 };
 
+// 🔐 LOGIN (🔥 FIX CRITIC)
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
     const checkUser = await User.findOne({ email });
+
     if (!checkUser) {
       return res.json({
         success: false,
-        message: "User doesn't exist! Please register first",
+        message: "User doesn't exist",
       });
     }
 
+    // 🔒 account lock
     if (checkUser.lockUntil && checkUser.lockUntil > Date.now()) {
       const secondsLeft = Math.ceil((checkUser.lockUntil - Date.now()) / 1000);
+
       return res.json({
         success: false,
-        message: `Too many failed attempts. Please try again in ${secondsLeft} seconds.`,
+        message: `Too many attempts. Try again in ${secondsLeft}s`,
       });
     }
 
-    const checkPasswordMatch = await bcrypt.compare(
-      password,
-      checkUser.password
-    );
+    const isMatch = await bcrypt.compare(password, checkUser.password);
 
-    if (!checkPasswordMatch) {
+    if (!isMatch) {
       checkUser.wrongLoginAttempts = (checkUser.wrongLoginAttempts || 0) + 1;
 
       if (checkUser.wrongLoginAttempts >= 5) {
-        checkUser.lockUntil = new Date(Date.now() + 30 * 1000);
+        checkUser.lockUntil = new Date(Date.now() + 30000);
         await sendSuspiciousLoginAlert(checkUser.email, checkUser.userName);
         checkUser.wrongLoginAttempts = 0;
       }
@@ -85,101 +87,113 @@ const loginUser = async (req, res) => {
 
       return res.json({
         success: false,
-        message: "Incorrect password! Please try again",
+        message: "Incorrect password",
       });
     }
 
+    // 🔄 reset lock
     checkUser.wrongLoginAttempts = 0;
     checkUser.lockUntil = undefined;
     await checkUser.save();
 
+    // 🔥 GENERATE TOKEN
     const token = jwt.sign(
       {
         id: checkUser._id,
         role: checkUser.role,
-        email: checkUser.email,
-        userName: checkUser.userName,
       },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "60m" }
+      { expiresIn: "1d" },
     );
 
-    res
-      .cookie("token", token, {
-        httpOnly: true,
-        secure: false,
-        maxAge: 60 * 60 * 1000,
-      })
-      .json({
-        success: true,
-        message: "Logged in successfully",
-        user: {
-          email: checkUser.email,
-          role: checkUser.role,
-          id: checkUser._id,
-          userName: checkUser.userName,
-        },
-      });
+    // 🔥 IMPORTANT: return token in JSON
+    res.json({
+      success: true,
+      message: "Logged in successfully",
+      user: {
+        id: checkUser._id,
+        email: checkUser.email,
+        role: checkUser.role,
+        userName: checkUser.userName,
+      },
+      token, // 🔥 ESENȚIAL
+    });
   } catch (e) {
-    console.log(e);
     res.status(500).json({
       success: false,
-      message: "Some error occurred",
+      message: e.message,
     });
   }
 };
 
+// 🔐 LOGOUT
 const logoutUser = (req, res) => {
-  res.clearCookie("token").json({
+  res.json({
     success: true,
-    message: "Logged out successfully!",
+    message: "Logged out",
   });
 };
 
-const authMiddleware = async (req, res, next) => {
-  const token = req.cookies.token;
-  if (!token)
+// 🔐 AUTH MIDDLEWARE (🔥 FIX COMPLET)
+const authMiddleware = (req, res, next) => {
+  // 🔥 suportă ambele
+  const token = req.cookies?.token || req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: "Unauthorised user!",
+      message: "Unauthorized",
     });
+  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
     req.user = decoded;
     next();
-  } catch (error) {
-    res.status(401).json({
+  } catch (err) {
+    return res.status(401).json({
       success: false,
-      message: "Unauthorised user!",
+      message: "Invalid token",
     });
   }
 };
 
+// 🔐 FORGOT PASSWORD
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
+
   try {
     const user = await User.findOne({ email });
-    if (!user)
-      return res.status(404).json({ success: false, message: "No user found" });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     const token = crypto.randomBytes(20).toString("hex");
+
     user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 3600_000;
+    user.resetPasswordExpires = Date.now() + 3600000;
+
     await user.save();
 
     await sendPasswordResetEmail(user.email, user.userName, token);
 
     res.json({
       success: true,
-      message: "Password reset instructions sent to your email",
+      message: "Reset email sent",
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
+// 🔐 RESET PASSWORD
 const resetPassword = async (req, res) => {
   const { token } = req.params;
   const { newPassword } = req.body;
@@ -189,62 +203,77 @@ const resetPassword = async (req, res) => {
       resetPasswordToken: token,
       resetPasswordExpires: { $gt: Date.now() },
     });
+
     if (!user) {
-      return res.status(400).json({
+      return res.json({
         success: false,
-        message: "Token is invalid or has expired",
+        message: "Invalid or expired token",
       });
     }
 
     user.password = await bcrypt.hash(newPassword, 12);
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+
     await user.save();
 
-    return res.json({ success: true, message: "Password has been reset" });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-const deleteAccount = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    await User.findByIdAndDelete(userId);
-    res.clearCookie("token").json({
+    res.json({
       success: true,
-      message: "Your account has been deleted.",
+      message: "Password reset successful",
     });
   } catch (err) {
-    console.error(err);
     res.status(500).json({
       success: false,
-      message: "Server error while deleting account",
+      message: err.message,
     });
   }
 };
 
+// 🔐 DELETE ACCOUNT
+const deleteAccount = async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.user.id);
+
+    res.json({
+      success: true,
+      message: "Account deleted",
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+// 🔐 PROFILE IMAGE
 const updateProfileImage = async (req, res) => {
   try {
     if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No file provided" });
+      return res.json({
+        success: false,
+        message: "No file provided",
+      });
     }
 
     const b64 = Buffer.from(req.file.buffer).toString("base64");
     const dataUrl = `data:${req.file.mimetype};base64,${b64}`;
+
     const { url } = await imageUploadUtil(dataUrl);
 
     const user = await User.findById(req.user.id);
     user.profileImage = url;
     await user.save();
 
-    res.json({ success: true, data: url });
+    res.json({
+      success: true,
+      data: url,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Upload failed" });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 

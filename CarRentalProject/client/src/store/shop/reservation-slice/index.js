@@ -1,4 +1,3 @@
-//client/src/store/shop/reservation-slice/index.js
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 
@@ -8,45 +7,61 @@ const initialState = {
   reservationDetails: null,
 };
 
+// 🔥 helper pentru token
+function getAuthConfig() {
+  const token = localStorage.getItem("token");
+
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
+
+// 🔥 CREATE
 export const createNewReservation = createAsyncThunk(
   "shopReservation/createNewReservation",
   async ({ userId, vehicles, startDate, endDate, addressInfo }) => {
     const response = await axios.post(
-      "/api/shop/reservation/create",
+      "http://localhost:5000/api/shop/reservation/create",
       { userId, vehicles, startDate, endDate, addressInfo },
-      { withCredentials: true },
+      getAuthConfig(),
     );
     return response.data;
   },
 );
 
+// 🔥 GET ALL
 export const getAllReservationsByUserId = createAsyncThunk(
   "shopReservation/getAllReservationsByUserId",
   async (userId) => {
-    const response = await axios.get(`/api/shop/reservation/list/${userId}`, {
-      withCredentials: true,
-    });
+    const response = await axios.get(
+      `http://localhost:5000/api/shop/reservation/list/${userId}`,
+      getAuthConfig(),
+    );
     return response.data;
   },
 );
 
+// 🔥 DETAILS
 export const getReservationDetails = createAsyncThunk(
   "shopReservation/getReservationDetails",
   async (reservationId) => {
     const response = await axios.get(
-      `/api/shop/reservation/details/${reservationId}`,
-      { withCredentials: true },
+      `http://localhost:5000/api/shop/reservation/details/${reservationId}`,
+      getAuthConfig(),
     );
     return response.data;
   },
 );
 
+// 🔥 CANCEL
 export const cancelReservation = createAsyncThunk(
   "shopReservation/cancelReservation",
   async (reservationId) => {
     const response = await axios.delete(
-      `/api/shop/reservation/cancel/${reservationId}`,
-      { withCredentials: true },
+      `http://localhost:5000/api/shop/reservation/cancel/${reservationId}`,
+      getAuthConfig(),
     );
     return response.data;
   },
@@ -102,12 +117,15 @@ const slice = createSlice({
       .addCase(cancelReservation.fulfilled, (state, action) => {
         state.isLoading = false;
         const updated = action.payload.data;
+
         const idx = state.reservationList.findIndex(
           (r) => r._id === updated._id,
         );
+
         if (idx !== -1) {
           state.reservationList[idx] = updated;
         }
+
         if (state.reservationDetails?._id === updated._id) {
           state.reservationDetails = updated;
         }

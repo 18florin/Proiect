@@ -1,0 +1,5 @@
+com/carrental/lucene/Main.class
+com/carrental/lucene/PdfIndexer.class
+com/carrental/lucene/SearchResult.class
+com/carrental/lucene/LuceneServer.class
+com/carrental/lucene/PdfSearcher.class

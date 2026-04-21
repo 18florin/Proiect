@@ -1,52 +1,68 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 
+const BASE_URL = "http://localhost:5000";
+
 const initialState = {
   addressList: [],
   isLoading: false,
   error: null,
 };
 
+function getAuthConfig() {
+  const token = localStorage.getItem("token");
+
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
+
 export const fetchAllAddresses = createAsyncThunk(
   "shopAddress/fetchAllAddresses",
   async () => {
-    const { data } = await axios.get("/api/shop/address", {
-      withCredentials: true,
-    });
+    const { data } = await axios.get(
+      `${BASE_URL}/api/shop/address`,
+      getAuthConfig(),
+    );
     return data;
-  }
+  },
 );
 
 export const addNewAddress = createAsyncThunk(
   "shopAddress/addNewAddress",
   async (formData) => {
-    const { data } = await axios.post("/api/shop/address", formData, {
-      withCredentials: true,
-    });
+    const { data } = await axios.post(
+      `${BASE_URL}/api/shop/address`,
+      formData,
+      getAuthConfig(),
+    );
     return data;
-  }
+  },
 );
 
 export const updateAddress = createAsyncThunk(
   "shopAddress/updateAddress",
   async ({ addressId, formData }) => {
     const { data } = await axios.put(
-      `/api/shop/address/${addressId}`,
+      `${BASE_URL}/api/shop/address/${addressId}`,
       formData,
-      { withCredentials: true }
+      getAuthConfig(),
     );
     return data;
-  }
+  },
 );
 
 export const deleteAddress = createAsyncThunk(
   "shopAddress/deleteAddress",
   async (addressId) => {
-    const { data } = await axios.delete(`/api/shop/address/${addressId}`, {
-      withCredentials: true,
-    });
+    const { data } = await axios.delete(
+      `${BASE_URL}/api/shop/address/${addressId}`,
+      getAuthConfig(),
+    );
     return data;
-  }
+  },
 );
 
 const slice = createSlice({
@@ -74,14 +90,14 @@ const slice = createSlice({
 
       .addCase(updateAddress.fulfilled, (state, action) => {
         const idx = state.addressList.findIndex(
-          (a) => a._id === action.payload.data._id
+          (a) => a._id === action.payload.data._id,
         );
         if (idx > -1) state.addressList[idx] = action.payload.data;
       })
 
       .addCase(deleteAddress.fulfilled, (state, action) => {
         state.addressList = state.addressList.filter(
-          (a) => a._id !== action.meta.arg
+          (a) => a._id !== action.meta.arg,
         );
       });
   },

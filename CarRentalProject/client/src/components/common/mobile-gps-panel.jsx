@@ -1,57 +1,54 @@
-//client/src/components/common/mobile-gps-panel.jsx
-import { useSelector } from "react-redux";
+import { useEffect, useRef } from "react";
+import socket from "@/socket";
+import { useMobile } from "@/context/mobile-context";
 
-export default function MobileGpsPanel() {
-  const { gpsData, approvalStatus, connected } = useSelector(
-    (state) => state.mobile,
-  );
+function MobileGpsPanel() {
+  const { sessionId } = useMobile();
 
-  if (!connected) {
-    return (
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <h3 className="mb-2 text-lg font-semibold">Device Location</h3>
-        <p className="text-sm text-gray-500">Phone not connected.</p>
-      </div>
-    );
-  }
+  const watchIdRef = useRef(null); // 🔥 salvăm watchId
 
-  if (approvalStatus !== "approved") {
-    return (
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <h3 className="mb-2 text-lg font-semibold">Device Location</h3>
-        <p className="text-sm text-gray-500">
-          Location becomes available after mobile approval.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    socket.on("start-gps", () => {
+      console.log("🚀 START GPS AFTER APPROVAL");
 
-  return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-lg font-semibold">Device Location</h3>
+      // ❗ evităm să pornim de mai multe ori
+      if (watchIdRef.current !== null) return;
 
-      {gpsData ? (
-        <div className="space-y-2 text-sm text-gray-700">
-          <p>
-            <span className="font-medium">Latitude:</span> {gpsData.lat}
-          </p>
-          <p>
-            <span className="font-medium">Longitude:</span> {gpsData.lng}
-          </p>
-          <p>
-            <span className="font-medium">Accuracy:</span>{" "}
-            {gpsData.accuracy ? `${Math.round(gpsData.accuracy)} m` : "Unknown"}
-          </p>
-          <p>
-            <span className="font-medium">Last update:</span>{" "}
-            {new Date(gpsData.timestamp).toLocaleString()}
-          </p>
-        </div>
-      ) : (
-        <p className="text-sm text-gray-500">
-          Press G to get the current device location.
-        </p>
-      )}
-    </div>
-  );
+      if (!navigator.geolocation) {
+        console.log("Geolocation not supported");
+        return;
+      }
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const coords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+
+          console.log("📱 Sending GPS:", coords);
+
+          socket.emit("send-location", {
+            sessionId,
+            coords,
+          });
+        },
+        (err) => console.error(err),
+        { enableHighAccuracy: true },
+      );
+    });
+
+    return () => {
+      socket.off("start-gps");
+
+      // 🔥 cleanup
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, [sessionId]);
+
+  return null;
 }
+
+export default MobileGpsPanel;

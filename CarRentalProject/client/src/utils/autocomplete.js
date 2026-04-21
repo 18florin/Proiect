@@ -1,4 +1,3 @@
-//client/src/utils/autocomplete.js
 function normalizeText(text) {
   return text
     .toLowerCase()
@@ -44,22 +43,29 @@ export function getAutocompleteSuggestions(products, query, limit = 5) {
 
   if (!normalizedQuery) return [];
 
-  const suggestions = [];
+  const bestMatches = new Map();
 
   products.forEach((product) => {
     const tokens = tokenize(product.title);
 
     tokens.forEach((token) => {
       const distance = levenshtein(normalizedQuery, token);
+      const isMatch = distance <= 2 || token.startsWith(normalizedQuery);
 
-      if (distance <= 2 || token.startsWith(normalizedQuery)) {
-        suggestions.push({
-          ...product,
-          score: distance,
-        });
+      if (isMatch) {
+        const existing = bestMatches.get(product.id);
+
+        if (!existing || distance < existing.score) {
+          bestMatches.set(product.id, {
+            ...product,
+            score: distance,
+          });
+        }
       }
     });
   });
 
-  return suggestions.sort((a, b) => a.score - b.score).slice(0, limit);
+  return Array.from(bestMatches.values())
+    .sort((a, b) => a.score - b.score)
+    .slice(0, limit);
 }

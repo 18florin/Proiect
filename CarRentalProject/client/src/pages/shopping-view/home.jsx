@@ -12,28 +12,27 @@ import {
   fetchAllFilteredVehicles,
   fetchVehicleDetails,
 } from "@/store/shop/vehicles-slice";
+
 import {
   createNewReservation,
   getAllReservationsByUserId,
 } from "@/store/shop/reservation-slice";
+
 import { getFeatureImages } from "@/store/common-slice";
-import {
-  markReservationSubmittedToAdmins,
-  resetMobileApproval,
-  setPendingMobileApproval,
-} from "@/store/mobile-slice";
+
+import socket from "@/socket";
+import { useMobile } from "@/context/mobile-context";
 
 export default function ShoppingHome() {
   const dispatch = useDispatch();
   const { toast } = useToast();
 
+  const { isMobileConnected, sessionId } = useMobile();
+
   const { vehicleList, vehicleDetails } = useSelector((s) => s.shopVehicles);
   const { featureImageList } = useSelector((s) => s.commonFeature);
   const { user, isAuthenticated } = useSelector((s) => s.auth);
   const { addressList } = useSelector((s) => s.shopAddress);
-  const { connected, approvalStatus, pendingReservation } = useSelector(
-    (s) => s.mobile,
-  );
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
@@ -41,12 +40,20 @@ export default function ShoppingHome() {
     JSON.parse(localStorage.getItem("savedCars") || "[]"),
   );
 
+  // 🔥 IMPORTANT: păstrăm payload aici
+  const [pendingPayload, setPendingPayload] = useState(null);
+
+  // 🔥 GPS STATE
+  const [gpsLocation, setGpsLocation] = useState(null);
+
+  // 🔐 FETCH ADDRESS
   useEffect(() => {
     if (isAuthenticated && user?._id) {
       dispatch(fetchAllAddresses(user._id));
     }
   }, [dispatch, isAuthenticated, user?._id]);
 
+  // 🔥 SLIDER
   useEffect(() => {
     const timer = setInterval(() => {
       if (featureImageList.length) {
@@ -57,6 +64,7 @@ export default function ShoppingHome() {
     return () => clearInterval(timer);
   }, [featureImageList]);
 
+  // 🔥 VEHICLES
   useEffect(() => {
     dispatch(
       fetchAllFilteredVehicles({
@@ -77,35 +85,67 @@ export default function ShoppingHome() {
     localStorage.setItem("savedCars", JSON.stringify(savedCars));
   }, [savedCars]);
 
+  // 🔥 SOCKET → GPS RECEIVE
   useEffect(() => {
-    async function submitReservationAfterApproval() {
-      if (approvalStatus === "approved" && pendingReservation) {
-        try {
-          await dispatch(createNewReservation(pendingReservation)).unwrap();
-          toast({ title: "Mobile approved. Reservation sent to admins!" });
-          dispatch(getAllReservationsByUserId(user._id));
-          dispatch(markReservationSubmittedToAdmins());
-        } catch (err) {
-          toast({
-            title: err.message || "Failed to make reservation",
-            variant: "destructive",
-          });
-          dispatch(resetMobileApproval());
-        }
-      }
+    socket.on("receive-location", (coords) => {
+      console.log("📍 GPS received:", coords);
+      setGpsLocation(coords);
+    });
 
-      if (approvalStatus === "rejected") {
+    return () => {
+      socket.off("receive-location");
+    };
+  }, []);
+
+  // 🔥 SOCKET RESPONSE → CREARE REZERVARE
+  useEffect(() => {
+    socket.on("approval-result", async ({ approved }) => {
+      console.log("📥 Approval result:", approved);
+
+      if (!approved) {
         toast({
-          title: "Reservation rejected from mobile",
+          title: "Rejected from phone ❌",
           variant: "destructive",
         });
-        dispatch(markReservationSubmittedToAdmins());
+        return;
       }
-    }
 
-    submitReservationAfterApproval();
-  }, [approvalStatus, pendingReservation, dispatch, toast, user?._id]);
+      try {
+        console.log("🔥 Creating reservation:", pendingPayload);
 
+        await dispatch(createNewReservation(pendingPayload)).unwrap();
+
+        toast({
+          title: "Reservation created ✅",
+          description: "Sent to admin",
+        });
+
+        // 🔥 refresh user reservations
+        dispatch(getAllReservationsByUserId(user._id));
+
+        // 🔥 AICI ADAUGI
+        socket.emit("start-gps", {
+          sessionId,
+        });
+
+        // 🔥 reset payload
+        setPendingPayload(null);
+      } catch (err) {
+        console.error("❌ Reservation error:", err);
+
+        toast({
+          title: "Failed to create reservation",
+          variant: "destructive",
+        });
+      }
+    });
+
+    return () => {
+      socket.off("approval-result");
+    };
+  }, [dispatch, toast, pendingPayload, user?._id]);
+
+  // 🔥 RESERVE FUNCTION
   async function handleReserveVehicle(v, reservationData) {
     if (!isAuthenticated) {
       return toast({
@@ -114,7 +154,7 @@ export default function ShoppingHome() {
       });
     }
 
-    if (!connected) {
+    if (!isMobileConnected) {
       return toast({
         title: "Mobile phone is not connected",
         variant: "destructive",
@@ -177,10 +217,18 @@ export default function ShoppingHome() {
       vehicleTitle: v.title,
     };
 
-    dispatch(setPendingMobileApproval(payload));
+    // 🔥 SALVĂM payload
+    setPendingPayload(payload);
+
+    // 🔥 TRIMITEM LA TELEFON
+    socket.emit("approval-needed", {
+      sessionId,
+      vehicle: v.title,
+      payload,
+    });
 
     toast({
-      title: "Waiting for mobile approval. Press A to approve or X to reject.",
+      title: "Waiting for approval on your phone...",
     });
   }
 
@@ -240,9 +288,23 @@ export default function ShoppingHome() {
           <ChevronRightIcon className="h-4 w-4" />
         </Button>
       </div>
+
       <div className="container mx-auto mt-6 px-4">
         <MobileGpsPanel />
+
+        {gpsLocation && (
+          <div className="mt-4">
+            <iframe
+              key={`${gpsLocation.lat}-${gpsLocation.lng}`}
+              width="100%"
+              height="300"
+              className="rounded-lg border"
+              src={`https://maps.google.com/maps?q=${gpsLocation.lat},${gpsLocation.lng}&z=15&output=embed`}
+            />
+          </div>
+        )}
       </div>
+
       <section className="py-12">
         <h2 className="mb-8 text-center text-3xl font-bold">
           Featured Vehicles

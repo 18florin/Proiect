@@ -22,39 +22,26 @@ import {
   ShoppingCart,
   Store,
 } from "lucide-react";
+
 import MobileStatus from "@/components/common/mobile-status";
+import { useMobile } from "@/context/mobile-context"; // 🔥 IMPORTANT
 
 const VISIBLE_IDS = ["home", "vehicles", "search", "merch"];
 
 function MenuItems({ isMobile = false, onItemClick }) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   function handleNavigate(item) {
     sessionStorage.removeItem("filters");
-
-    const newFilters =
-      item.id !== "home" && item.id !== "search" && item.id !== "merch"
-        ? { category: [item.id] }
-        : null;
-
-    if (newFilters) {
-      sessionStorage.setItem("filters", JSON.stringify(newFilters));
-    }
-
-    const path = item.path + (newFilters ? `?category=${item.id}` : "");
-    navigate(path);
-
-    if (onItemClick) {
-      onItemClick();
-    }
+    navigate(item.path);
+    if (onItemClick) onItemClick();
   }
 
   return (
     <nav
       className={`flex ${
         isMobile ? "flex-col items-start" : "flex-col lg:flex-row items-center"
-      } gap-4 lg:gap-6 mb-3 lg:mb-0`}
+      } gap-4 lg:gap-6`}
     >
       {shoppingViewHeaderMenuItems
         .filter((item) => VISIBLE_IDS.includes(item.id))
@@ -102,6 +89,9 @@ function HeaderRight() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  // 🔥 FOLOSIM CONTEXT, NU window
+  const { isMobileConnected } = useMobile();
+
   function handleLogout() {
     dispatch(logoutUser());
     navigate("/auth/login", { replace: true });
@@ -109,7 +99,9 @@ function HeaderRight() {
 
   return (
     <div className="flex items-center gap-3">
-      <MobileStatus />
+      {/* 🔥 STATUS REAL */}
+      <MobileStatus isMobileConnected={isMobileConnected} />
+
       <CartButton />
 
       <DropdownMenu>
@@ -127,12 +119,16 @@ function HeaderRight() {
 
         <DropdownMenuContent side="right" className="w-56">
           <DropdownMenuLabel>Signed in as {user?.userName}</DropdownMenuLabel>
+
           <DropdownMenuSeparator />
+
           <DropdownMenuItem onClick={() => navigate("/shop/account")}>
             <UserCog className="mr-2 h-4 w-4" />
             Account
           </DropdownMenuItem>
+
           <DropdownMenuSeparator />
+
           <DropdownMenuItem onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Logout

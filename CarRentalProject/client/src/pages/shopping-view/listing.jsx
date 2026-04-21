@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import socket from "@/socket";
 
 import VehicleFilter from "@/components/shopping-view/filter";
 import VehicleDetailsDialog from "@/components/shopping-view/vehicle-details";
@@ -22,31 +23,22 @@ import {
   fetchAllFilteredVehicles,
   fetchVehicleDetails,
 } from "@/store/shop/vehicles-slice";
-import {
-  createNewReservation,
-  getAllReservationsByUserId,
-} from "@/store/shop/reservation-slice";
-import {
-  markReservationSubmittedToAdmins,
-  resetMobileApproval,
-  setPendingMobileApproval,
-} from "@/store/mobile-slice";
+
+import { useMobile } from "@/context/mobile-context";
 
 import { ArrowUpDownIcon } from "lucide-react";
 
 export default function ShoppingListing() {
   const dispatch = useDispatch();
+  const { toast } = useToast();
+
+  const { isMobileConnected } = useMobile();
 
   const { vehicleList, vehicleDetails, pagination } = useSelector(
     (s) => s.shopVehicles,
   );
   const { user, isAuthenticated } = useSelector((s) => s.auth);
   const { addressList } = useSelector((s) => s.shopAddress);
-  const { connected, approvalStatus, pendingReservation } = useSelector(
-    (s) => s.mobile,
-  );
-
-  const { toast } = useToast();
 
   const [filters, setFilters] = useState({});
   const [maxPrice, setMaxPrice] = useState("");
@@ -59,12 +51,14 @@ export default function ShoppingListing() {
     JSON.parse(localStorage.getItem("savedCars") || "[]"),
   );
 
+  // 🔥 FETCH ADDRESS
   useEffect(() => {
     if (isAuthenticated && user?._id) {
       dispatch(fetchAllAddresses(user._id));
     }
   }, [dispatch, isAuthenticated, user?._id]);
 
+  // 🔥 FETCH VEHICLES
   useEffect(() => {
     dispatch(
       fetchAllFilteredVehicles({
@@ -88,34 +82,30 @@ export default function ShoppingListing() {
   }, [savedCars]);
 
   useEffect(() => {
-    async function submitReservationAfterApproval() {
-      if (approvalStatus === "approved" && pendingReservation) {
-        try {
-          await dispatch(createNewReservation(pendingReservation)).unwrap();
-          toast({ title: "Mobile approved. Reservation sent to admins!" });
-          dispatch(getAllReservationsByUserId(user._id));
-          dispatch(markReservationSubmittedToAdmins());
-        } catch (err) {
-          toast({
-            title: err.message || "Failed to make reservation",
-            variant: "destructive",
-          });
-          dispatch(resetMobileApproval());
-        }
-      }
+    socket.on("approval-result", ({ approved, payload }) => {
+      console.log("📥 Approval result:", approved);
 
-      if (approvalStatus === "rejected") {
+      if (approved) {
         toast({
-          title: "Reservation rejected from mobile",
+          id: "approval",
+          title: "Approved on phone ✅",
+          description: "Reservation sent to admin",
+        });
+      } else {
+        toast({
+          id: "approval",
+          title: "Rejected from phone ❌",
           variant: "destructive",
         });
-        dispatch(resetMobileApproval());
       }
-    }
+    });
 
-    submitReservationAfterApproval();
-  }, [approvalStatus, pendingReservation, dispatch, toast, user?._id]);
+    return () => {
+      socket.off("approval-result");
+    };
+  }, [toast]);
 
+  // 🔥 MAIN RESERVE FUNCTION (CLEAN)
   async function handleReserveVehicle(v, reservationData) {
     if (!isAuthenticated) {
       return toast({
@@ -124,7 +114,7 @@ export default function ShoppingListing() {
       });
     }
 
-    if (!connected) {
+    if (!isMobileConnected) {
       return toast({
         title: "Mobile phone is not connected",
         variant: "destructive",
@@ -187,10 +177,16 @@ export default function ShoppingListing() {
       vehicleTitle: v.title,
     };
 
-    dispatch(setPendingMobileApproval(payload));
+    // 🔥 TRIMITE LA TELEFON
+    socket.emit("approval-needed", {
+      sessionId: localStorage.getItem("sessionId"),
+      vehicle: v.title,
+      payload,
+    });
 
     toast({
-      title: "Waiting for mobile approval. Press A to approve or X to reject.",
+      id: "approval",
+      title: "Waiting for approval on your phone...",
     });
   }
 
@@ -257,17 +253,13 @@ export default function ShoppingListing() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-1"
-              >
+              <Button variant="outline" size="sm">
                 <ArrowUpDownIcon className="h-4 w-4" />
-                <span>Sort by</span>
+                Sort by
               </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end" className="w-[200px]">
+            <DropdownMenuContent>
               <DropdownMenuRadioGroup
                 value={sort}
                 onValueChange={handleSortChange}
@@ -299,28 +291,6 @@ export default function ShoppingListing() {
               isSaved={savedCars.includes(v._id)}
             />
           ))}
-        </div>
-
-        <div className="flex justify-center gap-2 py-4">
-          <Button
-            variant="outline"
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-          >
-            Previous
-          </Button>
-
-          <span className="px-3 py-1">
-            Page {currentPage} of {pagination?.pages || 1}
-          </span>
-
-          <Button
-            variant="outline"
-            disabled={pagination && currentPage >= pagination.pages}
-            onClick={() => setCurrentPage((p) => p + 1)}
-          >
-            Next
-          </Button>
         </div>
       </div>
 

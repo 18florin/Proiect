@@ -177,6 +177,11 @@ export const shoppingViewHeaderMenuItems = [
     label: "Merch",
     path: "/shop/merch",
   },
+  {
+    id: "lucene",
+    label: "Advanced Search",
+    path: "/shop/lucene-search",
+  },
 ];
 
 export const categoryOptionsMap = {
